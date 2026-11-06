@@ -1,0 +1,12 @@
+out/
+kernel/out/
+sdl/out/
+fbfix/out/
+helper/glos-gpu
+helper/glos-gpu-switch
+*.log
+
+# ARM's proprietary user-space driver: not in the repo (get-libmali.sh)
+/stubs/libMali.so
+/stubs/libMali.so.orig
+/glos/lib/libMali.so
