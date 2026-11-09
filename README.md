@@ -173,6 +173,28 @@ it); `/proc/pagetypeinfo`'s CMA line shows the free blocks by size.
 - Declaring the sticks' real range in the input device at launch
   (`EVIOCSABS`, saved and restored around the game): works, but it is a
   system-level change; the games scale their sticks themselves instead.
+- ARM's newer user-space build, r8p1-00rel0 (fbdev armhf, 2018, the only
+  newer one Bootlin's `mali-blobs` has; it also wants `libgcc_s.so.1` and
+  needs the executable-stack flag cleared like r6p2). It reports the same
+  kernel interface version (900) as r6p2 and r9p0, so it loads against this
+  `mali.ko` unchanged and draws correctly. No gain: LCS (PSP) standing in
+  gameplay with its frame cap off, 1,116 GL draws a frame, alternating runs
+  of 20 s: r6p2 27.26 / 27.23 fps, r8p1 27.18 / 27.18, and the busiest
+  non-game thread used more CPU on r8p1 (76–77% against 69–71%). Its build
+  strings say it comes from an Android r5p1 branch (`mali450-r5p1-01rel0-
+  lollipop-233-g52c929d`) built without profiling, not from r6p2's line.
+- ARM's newer kernel driver, r9p0-01rel0 (not built): against r6p2 its
+  changes are Android sync/fence support (about 1,200 of 1,500 added lines),
+  some memory and dma-buf handling and a few job-completion flags; nothing in
+  how jobs are queued or dispatched. Not worth redoing the 7.2 port and the
+  two fixes above for.
+- The `performance` CPU governor for a game's run (stock is `schedutil`,
+  120–1200 MHz, one policy for the four cores; the only two governors the
+  stock kernel has): nothing to gain. In the same LCS (PSP) scene `schedutil`
+  read 1200 MHz in all 80 samples of `scaling_cur_freq` over 20 s, and the
+  fps tied (27.09 against 27.11 on `performance`, one run each). The stock
+  kernel has no cpufreq statistics (`stats/time_in_state`), so sample
+  `scaling_cur_freq` to check another game.
 - lima for the ports: 7–9 fps in GTA III.
 - Around the lima leak above: resuming lima before the unbind, keeping it on
   during the session, a pause before the session, a trivial open/close of
