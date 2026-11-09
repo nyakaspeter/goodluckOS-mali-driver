@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1
+# glos-kernel:ready: the stock goodluckOS 0.1.0 kernel tree (Linux 7.2.9, its
+# GA36-MB drivers, patches and device trees, the stock configuration) with
+# `make modules` done, for building modules that load into the stock kernel
+# (mali.ko, glos_fbfix.ko, the glos-gpu helpers' compiler). Built by
+# ../make-kernel-image.sh; delete the image when not working on the driver.
+#
+# The stock tree differs from Dockerfile (the kernel experiments) in two
+# files, kept in stock/: the configuration (no CONFIG_EXPERT /
+# DRM_FBDEV_LEAK_PHYS_SMEM / GPIO_SYSFS, the stock command line) and the
+# gamepad driver (stock stick range 0-255).
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    build-essential gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
+    bc bison flex libssl-dev make libc6-dev kmod git \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV ARCH=arm
+ENV CROSS_COMPILE=arm-linux-gnueabihf-
+
+WORKDIR /src
+RUN git clone --depth=1 -b v7.2.9 https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
+WORKDIR /src/linux
+
+COPY patches/ /src/patches/
+RUN git apply /src/patches/*.patch
+
+COPY drivers/jd9366-ga36mbv1-2.c drivers/gpu/drm/panel/jd9366-ga36mbv1-2.c
+COPY stock/ga36mb-gamepad.c drivers/input/joystick/ga36mb-gamepad.c
+RUN echo 'obj-$(CONFIG_DRM_PANEL_JD9366) += jd9366-ga36mbv1-2.o' >> drivers/gpu/drm/panel/Makefile && \
+    sed -i '/^endmenu/i \
+config DRM_PANEL_JD9366\n\
+\ttristate "JD9366 panel"\n\
+\tdepends on OF && DRM && BACKLIGHT_CLASS_DEVICE\n\
+\thelp\n\
+\t  Say Y here if you want to enable support for JD9366 panels.\n\
+' drivers/gpu/drm/panel/Kconfig && \
+    echo 'obj-$(CONFIG_GA36MB_GAMEPAD) += ga36mb-gamepad.o' >> drivers/input/joystick/Makefile && \
+    sed -i '/^endif/i \
+config GA36MB_GAMEPAD\n\
+\ttristate "GA36MB GAMEPAD"\n\
+\tdepends on SERIAL_DEV_BUS\n\
+\thelp\n\
+\t  Say Y here to enable support for the GA36-MB Gamepad.\n\
+' drivers/input/joystick/Kconfig
+
+COPY dts/ arch/arm/boot/dts/allwinner/
+RUN echo 'dtb-$(CONFIG_MACH_SUN8I) += ga36mb-a23-panel1.dtb ga36mb-a23-panel2.dtb ga36mb-a33-panel1.dtb ga36mb-a33-panel2.dtb\n' >> arch/arm/boot/dts/allwinner/Makefile
+
+# olddefconfig must leave the stock configuration unchanged.
+COPY stock/config /src/stock.config
+RUN cp /src/stock.config .config && make olddefconfig && cmp .config /src/stock.config
+RUN make -j$(nproc) vmlinux && make -j$(nproc) modules && test "$(cat include/config/kernel.release)" = 7.2.9-dirty && ls -l Module.symvers

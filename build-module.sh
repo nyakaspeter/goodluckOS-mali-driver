@@ -1,12 +1,12 @@
 #!/bin/sh
-# Build mali.ko against goodluckOS's kernel tree (Docker image glos-kernel:mali-ready,
-# made from goodluckOS/kernel/Dockerfile plus `make modules`).
+# Build mali.ko against the stock goodluckOS kernel tree (Docker image
+# glos-kernel:ready, made by make-kernel-image.sh).
 # Usage: ./build-module.sh   -> out/mali.ko, build log in out/build.log
 set -eu
 cd "$(dirname "$0")"
 mkdir -p out
 rm -f out/mali.ko
-docker run --rm -v "$PWD/driver":/mali:ro -v "$PWD/out":/out ${KERNEL_IMAGE:-glos-kernel:mali-ready} sh -c '
+docker run --rm -v "$PWD/driver":/mali:ro -v "$PWD/out":/out ${KERNEL_IMAGE:-glos-kernel:ready} sh -c '
     cp -r /mali /tmp/mali &&
     make -C /tmp/mali JOBS=$(nproc) KDIR=/src/linux ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- \
         USING_UMP=0 BUILD=release USING_PROFILING=0 MALI_PLATFORM=sunxi \

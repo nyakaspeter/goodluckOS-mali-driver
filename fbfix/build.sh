@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build glos_fbfix.ko (and the fbinfo probe) against a goodluckOS kernel tree
-# in Docker. KERNEL_IMAGE: glos-kernel:ready (stock config, default) or
-# glos-kernel:mali-ready (the rebuilt kernel's config). Output in out/.
+# in Docker (glos-kernel:ready, made by ../make-kernel-image.sh; KERNEL_IMAGE
+# picks another). Output in out/.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p out

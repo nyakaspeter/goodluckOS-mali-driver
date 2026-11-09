@@ -90,18 +90,22 @@ the stock 16 MB CMA pool is enough (8.7 MB free with a game running).
 |---|---|
 | `glos/` | The deliverable above. Committed as built, so a port can package without building anything. |
 | `assemble-glos.sh` | Rebuilds the helpers and the fix module and refreshes `glos/` (needs the `glos-kernel:ready` image below). |
+| `make-kernel-image.sh` | Creates the `glos-kernel:ready` image (below). |
 | `helper/` | `glos-gpu.c`, `glos-gpu-switch.c`, `build.sh`. |
 | `fbfix/` | `glos_fbfix.c`, `fbinfo.c`, `build.sh`. |
 | `driver/` | sunxi-mali r6p2 kernel driver source, ported to Linux 7.2: `vm_flags_set`, the new shrinker API, `timer_delete`, void platform `remove`, `vma_flags_t` for shmem, `zap_special_vma_range`, `MODULE_IMPORT_NS("DMA_BUF")`, and a driver override so lima doesn't probe the device. `build-module.sh` builds it (`out/mali.ko`). |
 | `stubs/` | `empty.c` (the stub libraries' source), `libMali.so` (flag cleared), `libMali.so.orig`, the stubs. |
-| `kernel/` | goodluckOS's kernel build (Dockerfile, `build.sh`, its display and gamepad drivers, device trees). Needed only for the Docker image the module builds use; `kernel/out/` would hold boot images for kernel experiments. |
+| `kernel/` | goodluckOS's kernel build: `Dockerfile.modules` (the stock tree the module builds use, with `stock/`: the stock configuration and gamepad driver), and `Dockerfile` + `build.sh` for kernel experiments (boot images into `kernel/out/`; its configuration and gamepad driver are no longer stock), its display and gamepad drivers, patches, device trees. |
 | `sdl/` | Dockerfile for an SDL2 with the "mali" video backend, for SDL apps that should draw through ARM's driver (the three ports don't: they use the stock SDL for input and audio only). |
 
-Docker images: `glos-kernel:ready` is goodluckOS's kernel tree built with the
-stock configuration plus `make modules` (recreate it from `kernel/Dockerfile`
-with `docker buildx build --target kernel_builder -t glos-kernel:stock --load .`,
-`make modules` in it, commit as `glos-kernel:ready`). Everything here builds
-against it; `vermagic` matches the flashed kernel.
+Docker image: `glos-kernel:ready` is the stock goodluckOS kernel tree with
+`make modules` done (`7.2.9-dirty`, the stock configuration), about 3 GB.
+Everything here builds against it, so `vermagic` and the module layout match
+the stock kernel. `./make-kernel-image.sh` creates it
+(`kernel/Dockerfile.modules`, a full kernel build); delete it when not working
+on the driver (`docker image rm glos-kernel:ready`). `mali.ko` built against
+the custom kernel's configuration had the same code (`.text`) as against the
+stock one; only build IDs differed.
 
 ## Using ARM's driver for another app
 
