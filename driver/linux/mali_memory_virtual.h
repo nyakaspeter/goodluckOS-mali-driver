@@ -29,6 +29,9 @@ int mali_vma_offset_add(struct mali_allocation_manager *mgr,
 void mali_vma_offset_remove(struct mali_allocation_manager *mgr,
 			    struct mali_vma_node *node);
 
+int mali_vma_offset_add_checked(struct mali_allocation_manager *mgr,
+				struct mali_vma_node *node);
+
 struct mali_vma_node *mali_vma_offset_search(struct mali_allocation_manager *mgr,
 		unsigned long start,    unsigned long pages);
 

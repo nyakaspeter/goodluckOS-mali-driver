@@ -21,12 +21,24 @@
 #include "mali_memory_os_alloc.h"
 #include "mali_uk_types.h"
 
+#define MALI_PARK_MAX_PAGES 128
 struct mali_allocation_manager {
 	rwlock_t vm_lock;
 	struct rb_root allocation_mgr_rb;
 	struct list_head head;
 	struct mutex list_mutex;
 	u32 mali_allocation_num;
+	/* Freed allocations kept for the next allocation of the same size
+	 * (mali_park_*, mali_memory_util.c), by page count; [1]: deferred bind. */
+	struct mutex park_mutex;
+	struct list_head parked[2][MALI_PARK_MAX_PAGES + 1];
+	u32 parked_pages;
+	u32 parked_num;
+	bool park_closed;
+	/* Pages of lazily unmapped allocations, released after one TLB zap. */
+	struct list_head pending_pages;
+	u32 pending_count;
+	bool zap_pending;
 };
 
 extern struct idr mali_backend_idr;

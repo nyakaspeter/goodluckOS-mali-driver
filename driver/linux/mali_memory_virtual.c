@@ -76,6 +76,42 @@ out:
 /**
  * mali_vma_offset_remove() - Remove offset node from RB tree
  */
+/* mali_vma_offset_add unless the node's start lies inside a node of the
+ * tree (what mali_vma_offset_search(start, 0) finds): one walk for both. */
+int mali_vma_offset_add_checked(struct mali_allocation_manager *mgr,
+				struct mali_vma_node *node)
+{
+	struct rb_node **iter;
+	struct rb_node *parent = NULL;
+	struct mali_vma_node *iter_node, *best = NULL;
+	unsigned long start = node->vm_node.start;
+
+	write_lock(&mgr->vm_lock);
+	iter = &mgr->allocation_mgr_rb.rb_node;
+	while (*iter) {
+		parent = *iter;
+		iter_node = rb_entry(*iter, struct mali_vma_node, vm_rb);
+		if (start < iter_node->vm_node.start) {
+			iter = &(*iter)->rb_left;
+		} else if (start > iter_node->vm_node.start) {
+			best = iter_node;
+			iter = &(*iter)->rb_right;
+		} else {
+			write_unlock(&mgr->vm_lock);
+			return -EEXIST;
+		}
+	}
+	if (best && best->vm_node.start + best->vm_node.size > start) {
+		write_unlock(&mgr->vm_lock);
+		return -EEXIST;
+	}
+	rb_link_node(&node->vm_rb, parent, iter);
+	rb_insert_color(&node->vm_rb, &mgr->allocation_mgr_rb);
+	node->vm_node.allocated = 1;
+	write_unlock(&mgr->vm_lock);
+	return 0;
+}
+
 void mali_vma_offset_remove(struct mali_allocation_manager *mgr,
 			    struct mali_vma_node *node)
 {

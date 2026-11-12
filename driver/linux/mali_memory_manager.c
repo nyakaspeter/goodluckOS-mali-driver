@@ -66,6 +66,20 @@ int mali_memory_manager_init(struct mali_allocation_manager *mgr)
 	/* init RB tree */
 	mgr->allocation_mgr_rb = RB_ROOT;
 	mgr->mali_allocation_num = 0;
+	mutex_init(&mgr->park_mutex);
+	{
+		int i;
+		for (i = 0; i <= MALI_PARK_MAX_PAGES; i++) {
+			INIT_LIST_HEAD(&mgr->parked[0][i]);
+			INIT_LIST_HEAD(&mgr->parked[1][i]);
+		}
+		mgr->parked_num = 0;
+	}
+	mgr->parked_pages = 0;
+	mgr->park_closed = false;
+	INIT_LIST_HEAD(&mgr->pending_pages);
+	mgr->pending_count = 0;
+	mgr->zap_pending = false;
 	return 0;
 }
 
@@ -409,6 +423,10 @@ _mali_osk_errcode_t _mali_ukk_mem_allocate(_mali_uk_alloc_mem_s *args)
 
 	MALI_DEBUG_PRINT(4, (" _mali_ukk_mem_allocate, vaddr=0x%x, size =0x%x! \n", args->gpu_vaddr, args->psize));
 
+	/* A freed allocation of this size (checks the address itself). */
+	if (mali_park_take(session, args->gpu_vaddr, args->psize, args->vsize, args->flags, &ret)) {
+		return ret;
+	}
 	/* Check if the address is allocated
 	*/
 	mali_vma_node = mali_vma_offset_search(&session->allocation_mgr, args->gpu_vaddr, 0);
@@ -570,6 +588,13 @@ _mali_osk_errcode_t _mali_ukk_mem_allocate(_mali_uk_alloc_mem_s *args)
 		_mali_osk_mutex_signal(session->memory_lock);
 	}
 done:
+	mali_allocation->park_flags = args->flags;
+	mali_allocation->park_backend = mem_backend;
+	mali_allocation->parkable = MALI_MEM_OS == mem_backend->type && mali_allocation->psize > 0 &&
+				    mali_allocation->psize == mali_allocation->vsize &&
+				    mali_allocation->psize <= MALI_PARK_MAX_PAGES * MALI_MMU_PAGE_SIZE &&
+				    !(args->flags & (_MALI_MEMORY_ALLOCATE_RESIZEABLE | _MALI_MEMORY_ALLOCATE_NO_BIND_GPU |
+						     _MALI_MEMORY_ALLOCATE_SWAPPABLE | _MALI_MEMORY_ALLOCATE_SECURE));
 	if (MALI_MEM_OS == mem_backend->type) {
 		atomic_add(mem_backend->os_mem.count, &session->mali_mem_allocated_pages);
 	} else if (MALI_MEM_BLOCK == mem_backend->type) {

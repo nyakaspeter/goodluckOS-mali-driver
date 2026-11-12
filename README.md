@@ -142,6 +142,64 @@ such timeout (2026-11-01). The timer now keeps the data given to
 `_mali_osk_timer_setcallback` and the callback takes the group from there;
 SA's first load now recovers and goes on.
 
+## Freed allocations kept for the next one (`mali_mem_park`)
+
+ARM's GLES driver takes the memory for a draw's transformed vertices
+(position and varyings, when a draw has more than 256 vertices) with
+`MEM_ALLOC` and gives it back with `MEM_FREE` after the frame: about 140 of
+each a frame in VCS on a busy street (5,000 a second), 97% of them 8 KB
+blocks of the deferred kind, whose pages are bound when the GP job starts.
+Timed inside the module, an allocation took 14.3 µs, of which 8.5 µs went
+into making its records (the allocation and backend structures, the id, the
+list and tree entries), 2.3 µs into preparing the page tables and 3 µs into
+pages and mapping; a free took 14.7 µs, 6 µs of it the unmap and the TLB zap.
+4 ms a frame of the render thread.
+
+A freed allocation of the plain or deferred kind is now kept instead of
+taken apart: unmapped from the GPU (zapped as before) and out of the address
+tree, its pages returned if it is a deferred one, but with its records and
+id; the next `MEM_ALLOC` of that size and those flags gets it set up at its
+new address (`mali_park_put`, `mali_park_take` in
+`driver/linux/mali_memory_util.c`). At most 4,096 records and 24 MB of
+pages are kept per session, all released when the session closes;
+`mali_mem_park=0` (module parameter) turns it off. In VCS 99.6% of the
+allocations reuse a kept record, an allocation takes 8.1 µs and a free
+11.5 µs, and the render thread 1–2 ms less a frame (44.5 µs a GL draw against
+46–47). Kernel memory after a run is what it was before (`SUnreclaim` within
+30 kB over two runs).
+
+Keeping them by address instead (still mapped, handed back when the same
+address and size are asked for again) does not work: ARM's driver picks
+other addresses each frame (958 reuses in 164,000 allocations).
+
+Two more steps on top (`mali_mem_park_lazy`, on; 0: off), timed with both
+behaviours alternating every 2,048 frees inside one VCS run:
+
+- **One TLB zap for many frees.** ARM's free stalls the MMUs of the running
+  GP and PP jobs to zap their TLBs before the pages go back to the pool
+  (3.8 µs of each free). Every job start zaps the TLB anyway
+  (`mali_group_activate_page_directory`), so only a job running during the
+  free can still hold an entry. A parked allocation's page table entries are
+  now cleared without the zap; pages of the deferred kind wait on a
+  per-session list and go back to the pool after one zap for all of them
+  (at 1 MB of waiting pages, when a parked record is released, and at
+  session end); pages of the plain kind stay with their record. What a stale
+  entry points at therefore stays the session's own until a zap, as in ARM's
+  order. An unmap that would empty a page table takes the old path.
+- **One tree walk per allocation.** The "address already used" search and
+  the insert into the address tree are one walk under one lock
+  (`mali_vma_offset_add_checked`).
+
+A free went from 13.5 to 8.8 µs and an allocation from 8.5 to 7.6 µs (about
+0.8 ms a frame of VCS's render thread at 140 of each). Checked with VCS
+(street bench, three runs), GTA SA and Jedi Outcast (start, menus, stop): no
+kernel messages, the module unloads, `SUnreclaim` unchanged.
+
+`MEM_WRITE_SAFE` (the driver's copies of uniforms and small index lists,
+about three per allocation, 450 a frame in VCS) takes 1.3 µs inside the
+module: a bounds check and two copies through the stack. Nothing left there
+but the system call itself.
+
 ## Known cost: the display memory pool shrinks a little per game launch
 
 The display pool (CMA, 16 MB on the stock kernel) is shared by the kernel's

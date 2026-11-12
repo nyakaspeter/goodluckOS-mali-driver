@@ -150,6 +150,10 @@ typedef struct mali_mem_allocation {
 	struct list_head list;
 	s32 backend_handle; /* idr for mem_backend */
 	_mali_osk_atomic_t mem_alloc_refcount;
+	struct list_head park;       /* in the session's parked lists */
+	u32 park_flags;              /* the allocate call's flags */
+	void *park_backend;          /* its mali_mem_backend */
+	bool parkable;
 } mali_mem_allocation;
 
 struct mali_mem_os_allocator {
